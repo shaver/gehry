@@ -1,14 +1,39 @@
 $(function() {
-    var designer = document.getElementById("designer");
-    var context = designer.getContext("2d");
+    var buildingTypes = {
+        "FORGE": { name: "Forge", key: "w f", size: Size(3, 3), color: "blue" },
+        "SMELTER": { name: "Smelter", key: "e s", size: Size(3, 3), color: "green" },
+    };
 
-    var overlay = document.getElementById("overlay");
-    var overlayContext = overlay.getContext("2d");
+    var buildings = [ ];
 
-    var grid = document.getElementById("grid");
-    var gridContext = grid.getContext("2d");
+    var designerElt = document.getElementById("designer");
+    var designer = designerElt.getContext("2d");
+
+    var overlayElt = document.getElementById("overlay");
+    var overlay = overlayElt.getContext("2d");
+
+    var gridElt = document.getElementById("grid");
+    var grid = gridElt.getContext("2d");
+
+    var buildingCounter = 0;
+    function addBuilding(type, loc) {
+        var bldg = { type: type, id: buildingCounter++, loc: loc };
+        buildings.push(bldg);
+    }
+
+    function drawBuildings(context) {
+        buildings.forEach(function(bldg) {
+            context.fillStyle = bldg.type.color;
+            context.fillRect(bldg.loc.left, bldg.loc.top,
+                             bldg.type.size.width * GRIDSIZE, bldg.type.size.height * GRIDSIZE);
+        });
+    }
 
     const GRIDSIZE = 16;
+
+    function Size(w, h) {
+        return { width: w, height: h};
+    }
     function snap(val) {
         return val - val % GRIDSIZE + GRIDSIZE / 2;
     }
@@ -44,7 +69,6 @@ $(function() {
         rect.width = rect.right - rect.left;
         rect.height = rect.bottom - rect.top;
 
-        console.log(JSON.stringify(loc1), JSON.stringify(loc2), JSON.stringify(rect));
         return rect;
     }
 
@@ -62,23 +86,25 @@ $(function() {
         mousemove: function mousemove (e) {
             var loc = mouseloc(e);
 
-            overlayContext.clearRect(0, 0, overlay.width, overlay.height);
+            overlay.clearRect(0, 0, overlayElt.width, overlayElt.height);
 
             if (mode == modes.PENCIL) {
-                context.fillRect(loc.left, loc.top, loc.width, loc.height);
+                designer.fillStyle = "black";
+                designer.fillRect(loc.left, loc.top, loc.width, loc.height);
             } else if (mode == modes.RECT) {
+                designer.fillStyle = "black";
                 var rect = boundingRect(loc, startLoc);
-                context.fillRect(rect.left, rect.top, rect.width, rect.height);
+                designer.fillRect(rect.left, rect.top, rect.width, rect.height);
             } else if (mode == modes.DRAG3x3) {
-                overlayContext.fillStyle = "rgba(128, 0, 128, 0.5)";
-                overlayContext.fillRect(loc.left, loc.top, 3 * GRIDSIZE, 3 * GRIDSIZE);
+                overlay.fillStyle = "rgba(128, 0, 128, 0.5)";
+                overlay.fillRect(loc.left, loc.top, 3 * GRIDSIZE, 3 * GRIDSIZE);
             }
 
-            overlayContext.beginPath();
-            overlayContext.arc(loc.x, loc.y, 5, 0, 2 * Math.PI);
-            overlayContext.strokeStyle = "rgb(255, 0, 0)";
-            overlayContext.lineWidth = 3;
-            overlayContext.stroke();
+            overlay.beginPath();
+            overlay.arc(loc.x, loc.y, 5, 0, 2 * Math.PI);
+            overlay.strokeStyle = "rgb(255, 0, 0)";
+            overlay.lineWidth = 3;
+            overlay.stroke();
         },
         mousedown: function mousedown(e) {
             if (e.button != 0) {
@@ -87,8 +113,8 @@ $(function() {
 
             var loc = mouseloc(e);
 
-            context.beginPath();
-            context.moveTo(loc.x, loc.y);
+            designer.beginPath();
+            designer.moveTo(loc.x, loc.y);
             if (e.shiftKey) {
                 mode = modes.RECT;
                 startLoc = loc;
@@ -97,6 +123,7 @@ $(function() {
             } else {
                 mode = modes.PENCIL;
             }
+            events.mousemove(e);
         },
         mouseup: function mouseup(e) {
             if (e.button != 0) {
@@ -105,34 +132,36 @@ $(function() {
 
             var loc = mouseloc(e);
 
-            events.mousemove(e)
             if (mode == modes.DRAG3x3) {
-                // drop on the designer
-                context.fillRect(loc.left, loc.top, GRIDSIZE * 3, GRIDSIZE * 3);
+                // drop on the designerElt
+                addBuilding(buildingTypes[buildingCounter % 2 ? "FORGE" : "SMELTER"], loc);
+                drawBuildings(designer);
+                mode = modes.POINTING; // gross: redraw without drag cursor
             }
+            events.mousemove(e)
             mode = modes.POINTING;
         }
     };
 
-    overlay.addEventListener("mousedown", events.mousedown, false);
-    overlay.addEventListener("mousemove", events.mousemove, false);
-    overlay.addEventListener("mouseup", events.mouseup, false);
+    overlayElt.addEventListener("mousedown", events.mousedown, false);
+    overlayElt.addEventListener("mousemove", events.mousemove, false);
+    overlayElt.addEventListener("mouseup", events.mouseup, false);
 
-    var width = designer.width, height = designer.height;
+    var width = designerElt.width, height = designerElt.height;
     for (var i = 0; i <= width; i += 16) {
-        gridContext.beginPath();
-        gridContext.strokeStyle = "rgb(200, 200, 200)";
-        gridContext.moveTo(i, 0);
-        gridContext.lineTo(i, height);
-        gridContext.stroke();
+        grid.beginPath();
+        grid.strokeStyle = "rgb(200, 200, 200)";
+        grid.moveTo(i, 0);
+        grid.lineTo(i, height);
+        grid.stroke();
     }
 
     for (var i = 0; i < height; i += 16) {
-        gridContext.beginPath();
-        gridContext.styleStyle = "rgb(200, 200, 200)";
-        gridContext.moveTo(0, i);
-        gridContext.lineTo(width, i);
-        gridContext.stroke();
+        grid.beginPath();
+        grid.styleStyle = "rgb(200, 200, 200)";
+        grid.moveTo(0, i);
+        grid.lineTo(width, i);
+        grid.stroke();
     }
 });
 
