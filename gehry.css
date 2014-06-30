@@ -1,3 +1,3 @@
-#designer, #overlay { position: absolute; top: 0; left: 0;}
+#designer, #overlay, #grid { position: absolute; top: 0; left: 0;}
 
-#overlay { background: transparent; }
+#overlay, #designer { background: transparent; }

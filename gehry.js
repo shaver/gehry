@@ -5,6 +5,9 @@ $(function() {
     var overlay = document.getElementById("overlay");
     var overlayContext = overlay.getContext("2d");
 
+    var grid = document.getElementById("grid");
+    var gridContext = grid.getContext("2d");
+
     const GRIDSIZE = 16;
     function snap(val) {
         return val - val % GRIDSIZE + GRIDSIZE / 2;
@@ -48,7 +51,8 @@ $(function() {
     var modes = {
         POINTING: "pointing",
         PENCIL: "pencil",
-        RECT: "rect"
+        RECT: "rect",
+        DRAG3x3: "drag3x3"
     }
 
     var mode = modes.POINTING;
@@ -61,14 +65,13 @@ $(function() {
             overlayContext.clearRect(0, 0, overlay.width, overlay.height);
 
             if (mode == modes.PENCIL) {
-                context.beginPath();
-                context.rect(loc.left, loc.top, loc.width, loc.height);
-                context.fill();
+                context.fillRect(loc.left, loc.top, loc.width, loc.height);
             } else if (mode == modes.RECT) {
-                context.beginPath();
                 var rect = boundingRect(loc, startLoc);
-                context.rect(rect.left, rect.top, rect.width, rect.height);
-                context.fill();
+                context.fillRect(rect.left, rect.top, rect.width, rect.height);
+            } else if (mode == modes.DRAG3x3) {
+                overlayContext.fillStyle = "rgba(128, 0, 128, 0.5)";
+                overlayContext.fillRect(loc.left, loc.top, 3 * GRIDSIZE, 3 * GRIDSIZE);
             }
 
             overlayContext.beginPath();
@@ -78,6 +81,10 @@ $(function() {
             overlayContext.stroke();
         },
         mousedown: function mousedown(e) {
+            if (e.button != 0) {
+                return;
+            }
+
             var loc = mouseloc(e);
 
             context.beginPath();
@@ -85,12 +92,24 @@ $(function() {
             if (e.shiftKey) {
                 mode = modes.RECT;
                 startLoc = loc;
+            } else if (e.altKey) {
+                mode = modes.DRAG3x3;
             } else {
                 mode = modes.PENCIL;
             }
         },
         mouseup: function mouseup(e) {
+            if (e.button != 0) {
+                return;
+            }
+
+            var loc = mouseloc(e);
+
             events.mousemove(e)
+            if (mode == modes.DRAG3x3) {
+                // drop on the designer
+                context.fillRect(loc.left, loc.top, GRIDSIZE * 3, GRIDSIZE * 3);
+            }
             mode = modes.POINTING;
         }
     };
@@ -101,19 +120,19 @@ $(function() {
 
     var width = designer.width, height = designer.height;
     for (var i = 0; i <= width; i += 16) {
-        context.beginPath();
-        context.strokeStyle = "rgb(200, 200, 200)";
-        context.moveTo(i, 0);
-        context.lineTo(i, height);
-        context.stroke();
+        gridContext.beginPath();
+        gridContext.strokeStyle = "rgb(200, 200, 200)";
+        gridContext.moveTo(i, 0);
+        gridContext.lineTo(i, height);
+        gridContext.stroke();
     }
 
     for (var i = 0; i < height; i += 16) {
-        context.beginPath();
-        context.styleStyle = "rgb(200, 200, 200)";
-        context.moveTo(0, i);
-        context.lineTo(width, i);
-        context.stroke();
+        gridContext.beginPath();
+        gridContext.styleStyle = "rgb(200, 200, 200)";
+        gridContext.moveTo(0, i);
+        gridContext.lineTo(width, i);
+        gridContext.stroke();
     }
 });
 
