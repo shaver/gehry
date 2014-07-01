@@ -1,22 +1,16 @@
 const GRIDSIZE = 16;
 const PALETTE_WIDTH = 100;
 
-require(["building"],
-    function(Building) {
-
+require(["building", "overlay", "designer"], function(Building, overlay, designer) {
         var designerElt = document.getElementById("designer");
-        var designer = designerElt.getContext("2d");
+        designer.setElement(designerElt);
 
         var overlayElt = document.getElementById("overlay");
-        var overlay = overlayElt.getContext("2d");
+        overlay.setElement(overlayElt);
+        overlay.setDesigner(designer);
 
         var gridElt = document.getElementById("grid");
         var grid = gridElt.getContext("2d");
-
-
-        function drawBuildings(buildings, context) {
-            buildings.forEach(function(bldg) { bldg.draw(context); });
-        }
 
         function snap(val) {
             return val - val % GRIDSIZE + GRIDSIZE / 2;
@@ -64,73 +58,20 @@ require(["building"],
         var mode = modes.POINTING;
         var startLoc = null;
         var snappedMouseLoc = null;
-        var draggedBuilding = null;
-        var cursorBuilding = null;
-        var placedBuildings = [];
 
-        function startDraggingBuilding(bldg, loc) {
-            draggedBuilding = bldg;
-            cursorBuilding = new Building(bldg.type, loc)
-        }
-
-        function stopDraggingBuilding(loc) {
-            if (draggedBuilding) {
-                draggedBuilding.updateLoc(loc);
-                draggedBuilding = null;
-                cursorBuilding = null;
-            }
-        }
-
-        function maybeDragBuilding(loc) {
-            if (cursorBuilding) {
-                cursorBuilding.updateLoc(loc);
-            }
-        }
-
-        function redrawDesigner() {
-            designer.clearRect(0, 0, designerElt.width, designerElt.height);
-            drawBuildings(placedBuildings.filter(function(bldg) {
-                var isDragged = draggedBuilding && (bldg.id == draggedBuilding.id);
-                return !isDragged;
-            }), designer);
-        }
-
-        function redrawOverlay() {
-            if (!snappedMouseLoc)
-                return;
-            overlay.clearRect(0, 0, overlayElt.width, overlayElt.height);
-            overlay.fillStyle = "rgb(255, 0, 0, 0.5)";
-            overlay.beginPath();
-            overlay.arc(snappedMouseLoc.x, snappedMouseLoc.y, 5, 0, 2 * Math.PI);
-            overlay.fill();
-
-            if (mode == modes.PLACE_NEW) {
-                overlay.beginPath();
-                overlay.fillStyle = "rgba(128, 0, 128, 0.5)";
-                overlay.fillRect(snappedMouseLoc.left, snappedMouseLoc.top, 3 * GRIDSIZE, 3 * GRIDSIZE);
-            }
-
-            if (draggedBuilding) {
-                overlay.save();
-                overlay.globalAlpha = 0.5;
-                draggedBuilding.draw(overlay);
-                cursorBuilding.draw(overlay);
-                overlay.restore();
-            }
-        }
-
-        function redraw() {
-            redrawGrid();
-            redrawOverlay();
-            redrawDesigner();
+        function redraw(loc) {
+            redrawGrid(loc);
+            overlay.draw(loc);
+            designer.draw(loc);
         }
 
         var events = {
             mousemove: function mousemove (e) {
-                snappedMouseLoc = mouseloc(e);
-                maybeDragBuilding(snappedMouseLoc);
-                redraw();
+                var loc = mouseloc(e);
+                overlay.dragMove(loc);
+                redraw(loc);
             },
+
             mousedown: function mousedown(e) {
                 if (e.button != 0) {
                     return;
@@ -139,38 +80,32 @@ require(["building"],
                 var loc = mouseloc(e);
 
                 if (e.altKey) {
-                    mode = modes.PLACE_NEW;
+                    var type = Building.TYPES[Building.getNextId() % Building.TYPES.length];
+                    overlay.startPlaceNew(type, loc);
                 } else {
-                    var bldg = Building.forLocation(placedBuildings, loc);
+                    var bldg = designer.buildingForLocation(loc);
                     if (bldg) {
-                        startDraggingBuilding(bldg, loc);
-                    } else {
-                        mode = modes.PENCIL;
+                        overlay.dragStart(bldg, loc);
                     }
                 }
                 events.mousemove(e);
             },
+
             mouseup: function mouseup(e) {
                 if (e.button != 0) {
                     return;
                 }
 
                 var loc = mouseloc(e);
-
-                if (mode == modes.PLACE_NEW) {
-                    // drop on the designer
-                    var type = Building.TYPES[Building.getNextId() % Building.TYPES.length];
-                    placedBuildings.push(new Building(type, loc));
-                }
-                stopDraggingBuilding(loc);
-                mode = modes.POINTING;
                 events.mousemove(e)
+                overlay.dragDrop(loc);
+                mode = modes.POINTING;
             }
         };
 
         overlayElt.addEventListener("mousedown", events.mousedown, false);
         overlayElt.addEventListener("mousemove", events.mousemove, false);
-        overlayElt.addEventListener("mouseup", events.mouseup, false);
+        overlayElt.addEventListener("mouseup",   events.mouseup,   false);
 
         function redrawGrid() {
             var width = designerElt.width - PALETTE_WIDTH, height = designerElt.height;
