@@ -1,3 +1,5 @@
 #designer, #overlay, #grid { position: absolute; top: 0; left: 0;}
 
 #overlay, #designer { background: transparent; }
+#grid { background: white; }
+html { background-color: black ;}
