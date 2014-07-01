@@ -1,10 +1,5 @@
 $(function() {
-    var buildingTypes = {
-        "FORGE": { name: "Forge", key: "w f", size: Size(3, 3), color: "blue" },
-        "SMELTER": { name: "Smelter", key: "e s", size: Size(3, 3), color: "green" },
-    };
-
-    var buildings = [ ];
+    const GRIDSIZE = 16;
 
     var designerElt = document.getElementById("designer");
     var designer = designerElt.getContext("2d");
@@ -15,21 +10,57 @@ $(function() {
     var gridElt = document.getElementById("grid");
     var grid = gridElt.getContext("2d");
 
-    var buildingCounter = 0;
-    function addBuilding(type, loc) {
-        var bldg = { type: type, id: buildingCounter++, loc: loc };
-        buildings.push(bldg);
+    function Building(type, loc) {
+        this.type = type;
+        this.id = Building._counter++;
+        this.updateLoc(loc);
+    };
+
+    Building.TYPES = {
+        "FORGE": { name: "Forge", key: "w f", size: Size(3, 3), color: "blue", symbol: "F" },
+        "SMELTER": { name: "Smelter", key: "e s", size: Size(3, 3), color: "green", symbol: "S" },
+    };
+
+    Building._counter = 1;
+
+    Building.prototype.updateLoc = function(loc) {
+        loc.width = this.type.size.width * GRIDSIZE;
+        loc.height = this.type.size.height * GRIDSIZE;
+        loc.right = loc.x + loc.width;
+        loc.bottom = loc.y + loc.height;
+        this.loc = loc;
+    };
+
+    Building.prototype.draw = function(context) {
+        var btype = this.type;
+
+        context.beginPath();
+        context.fillStyle = btype.color;
+        var width = this.loc.width;
+        var height = this.loc.height;
+        context.fillRect(this.loc.left, this.loc.top, width, height);
+
+        context.font = GRIDSIZE * 0.75 + "px sans-serif";
+        var metrics = context.measureText(btype.symbol);
+        context.fillStyle = "white";
+        context.fillText(btype.symbol,
+                         this.loc.left + width / 2 - metrics.width / 2,
+                         this.loc.top + height / 2 + metrics.width / 2);
     }
 
-    function drawBuildings(context) {
-        buildings.forEach(function(bldg) {
-            context.fillStyle = bldg.type.color;
-            context.fillRect(bldg.loc.left, bldg.loc.top,
-                             bldg.type.size.width * GRIDSIZE, bldg.type.size.height * GRIDSIZE);
+    Building.forLocation = function(buildings, loc) {
+        var bldgs = buildings.filter(function(bldg) {
+            var inside = loc.x > bldg.loc.left && loc.x < bldg.loc.right &&
+                  loc.y > bldg.loc.top && loc.y < bldg.loc.bottom;
+            return inside;
         });
+        // return the one drawn last, which is the one it looks like we're clicking
+        return bldgs[bldgs.length - 1];
     }
 
-    const GRIDSIZE = 16;
+    function drawBuildings(buildings, context) {
+        buildings.forEach(function(bldg) { bldg.draw(context); });
+    }
 
     function Size(w, h) {
         return { width: w, height: h};
@@ -80,31 +111,71 @@ $(function() {
     }
 
     var mode = modes.POINTING;
-    var startLoc;
+    var startLoc = null;
+    var snappedMouseLoc = null;
+    var draggedBuilding = null;
+    var cursorBuilding = null;
+    var placedBuildings = [];
 
-    var events = { 
-        mousemove: function mousemove (e) {
-            var loc = mouseloc(e);
+    function startDraggingBuilding(bldg, loc) {
+        draggedBuilding = bldg;
+        cursorBuilding = new Building(bldg.type, loc)
+    }
 
-            overlay.clearRect(0, 0, overlayElt.width, overlayElt.height);
+    function stopDraggingBuilding(loc) {
+        if (draggedBuilding) {
+            draggedBuilding.updateLoc(loc);
+            draggedBuilding = null;
+            cursorBuilding = null;
+        }
+    }
 
-            if (mode == modes.PENCIL) {
-                designer.fillStyle = "black";
-                designer.fillRect(loc.left, loc.top, loc.width, loc.height);
-            } else if (mode == modes.RECT) {
-                designer.fillStyle = "black";
-                var rect = boundingRect(loc, startLoc);
-                designer.fillRect(rect.left, rect.top, rect.width, rect.height);
-            } else if (mode == modes.DRAG3x3) {
-                overlay.fillStyle = "rgba(128, 0, 128, 0.5)";
-                overlay.fillRect(loc.left, loc.top, 3 * GRIDSIZE, 3 * GRIDSIZE);
-            }
+    function maybeDragBuilding(loc) {
+        if (cursorBuilding) {
+            cursorBuilding.updateLoc(loc);
+        }
+    }
 
+    function redrawDesigner() {
+        designer.clearRect(0, 0, designerElt.width, designerElt.height);
+        drawBuildings(placedBuildings.filter(function(bldg) {
+            var isDragged = draggedBuilding && (bldg.id == draggedBuilding.id);
+            return !isDragged;
+        }), designer);
+    }
+
+    function redrawOverlay() {
+        overlay.clearRect(0, 0, overlayElt.width, overlayElt.height);
+        overlay.fillStyle = "rgb(255, 0, 0, 0.5)";
+        overlay.beginPath();
+        overlay.arc(snappedMouseLoc.x, snappedMouseLoc.y, 5, 0, 2 * Math.PI);
+        overlay.fill();
+
+        if (mode == modes.DRAG3x3) {
             overlay.beginPath();
-            overlay.arc(loc.x, loc.y, 5, 0, 2 * Math.PI);
-            overlay.strokeStyle = "rgb(255, 0, 0)";
-            overlay.lineWidth = 3;
-            overlay.stroke();
+            overlay.fillStyle = "rgba(128, 0, 128, 0.5)";
+            overlay.fillRect(snappedMouseLoc.left, snappedMouseLoc.top, 3 * GRIDSIZE, 3 * GRIDSIZE);
+        }
+
+        if (draggedBuilding) {
+            overlay.save();
+            overlay.globalAlpha = 0.5;
+            draggedBuilding.draw(overlay);
+            cursorBuilding.draw(overlay);
+            overlay.restore();
+        }
+    }
+
+    function redraw() {
+        redrawOverlay();
+        redrawDesigner();
+    }
+
+    var events = {
+        mousemove: function mousemove (e) {
+            snappedMouseLoc = mouseloc(e);
+            maybeDragBuilding(snappedMouseLoc);
+            redraw();
         },
         mousedown: function mousedown(e) {
             if (e.button != 0) {
@@ -113,15 +184,18 @@ $(function() {
 
             var loc = mouseloc(e);
 
-            designer.beginPath();
-            designer.moveTo(loc.x, loc.y);
-            if (e.shiftKey) {
+             if (e.shiftKey) {
                 mode = modes.RECT;
                 startLoc = loc;
             } else if (e.altKey) {
                 mode = modes.DRAG3x3;
             } else {
-                mode = modes.PENCIL;
+                var bldg = Building.forLocation(placedBuildings, loc);
+                if (bldg) {
+                    startDraggingBuilding(bldg, loc);
+                } else {
+                    mode = modes.PENCIL;
+                }
             }
             events.mousemove(e);
         },
@@ -134,12 +208,12 @@ $(function() {
 
             if (mode == modes.DRAG3x3) {
                 // drop on the designerElt
-                addBuilding(buildingTypes[buildingCounter % 2 ? "FORGE" : "SMELTER"], loc);
-                drawBuildings(designer);
-                mode = modes.POINTING; // gross: redraw without drag cursor
+                var type = Building.TYPES[Building._counter % 2 ? "FORGE" : "SMELTER"];
+                placedBuildings.push(new Building(type, loc));
             }
-            events.mousemove(e)
+            stopDraggingBuilding(loc);
             mode = modes.POINTING;
+            events.mousemove(e)
         }
     };
 
